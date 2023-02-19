@@ -2,36 +2,32 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
-#include <sys/time.h>
+#include <time.h>
 #include "libcoro.h"
-
-#define MAX_FILES 10
-#define MAX_NUMBERS_IN_FILE 10000
-#define FILE_NAME_SIZE 20
 
 struct env {
     short id;
-    char file[FILE_NAME_SIZE];
+    char* file;
     int* array;
     int size;
     float maxTime;
     uint64_t timeCheckPoint;
-    int workTime;
+    uint64_t workTime;
     int yield_counter;
 }; 
 
-char file_queue[MAX_FILES][FILE_NAME_SIZE];
-int arrays[MAX_FILES][MAX_NUMBERS_IN_FILE];
-int sizes[MAX_FILES];
+char** file_queue;
+int** arrays;
+int* sizes;
 int queue_ind = 0;
 int queue_size = 0;
 
 
 // https://rextester.com/ABZ2569
 uint64_t getTime() {
-	struct timeval currentTime;
-	gettimeofday(&currentTime, NULL);
-	return (uint64_t)currentTime.tv_sec * 1000000 + (uint64_t)currentTime.tv_usec;
+	struct timespec currentTime;
+    clock_gettime(CLOCK_MONOTONIC, &currentTime);
+	return (uint64_t)currentTime.tv_sec * 1000000 + (uint64_t)(currentTime.tv_nsec / 1000);
 }
 
 void swap(int* a, int* b) {
@@ -47,8 +43,7 @@ int partition(struct env* coro_env, int start, int end) {
     for (int i = start; i <= end - 1; i++) {
         uint64_t ts = getTime();    
         if (ts - coro_env->timeCheckPoint > coro_env->maxTime) {
-            coro_env->workTime += (int)(ts - coro_env->timeCheckPoint);
-            coro_env->yield_counter++;
+            coro_env->workTime += ts - coro_env->timeCheckPoint;
             coro_yield();
             coro_env->timeCheckPoint = getTime();
         }
@@ -63,7 +58,7 @@ int partition(struct env* coro_env, int start, int end) {
 }
 
 
-int quick_sort(struct env* enva, int start, int end) {
+void quick_sort(struct env* enva, int start, int end) {
     if (start < end) {
         int idx = partition(enva, start, end);
         quick_sort(enva, start, idx - 1);
@@ -76,10 +71,11 @@ static int coroutine_func_f(void *context) {
 	struct env* envirounment = context;
 
     printf("Корутина [%d]: Начинаю работу\n", envirounment->id);
+    envirounment->timeCheckPoint = getTime();
 
     while (queue_ind < queue_size) {
         // Подготока данных кооутины для след. файла
-        strcpy(envirounment->file, file_queue[queue_ind]);
+        envirounment->file = file_queue[queue_ind];
         envirounment->size = 0;
         envirounment->array = arrays[queue_ind];
     
@@ -94,12 +90,11 @@ static int coroutine_func_f(void *context) {
         // Считываем данные из файла
         while (!feof(file)) {
             uint64_t ts = getTime();
-            // if (ts - envirounment->timeCheckPoint > envirounment->maxTime) {
-            //     envirounment->workTime += (int)(ts - envirounment->timeCheckPoint);
-            //     envirounment->yield_counter++;
-            //     coro_yield();
-            //     envirounment->timeCheckPoint = getTime();
-            // }
+            if (ts - envirounment->timeCheckPoint > envirounment->maxTime) {
+                envirounment->workTime += ts - envirounment->timeCheckPoint;
+                coro_yield();
+                envirounment->timeCheckPoint = getTime();
+            }
             fscanf(file, "%d", &envirounment->array[size]);
             size++;
         }
@@ -113,7 +108,8 @@ static int coroutine_func_f(void *context) {
         quick_sort(envirounment, 0, size - 1);
     }
 
-    envirounment->workTime += (int)(getTime() - envirounment->timeCheckPoint);
+    envirounment->workTime += getTime() - envirounment->timeCheckPoint;
+    envirounment->yield_counter = coro_switch_count(this);
     printf("Корутина [%d]: Завершаю работу\n", envirounment->id);
 
 	return 0;
@@ -121,22 +117,44 @@ static int coroutine_func_f(void *context) {
 
 int main(int argc, char* argv[]) {
     uint64_t mainTimeStart = getTime();
-    struct env envs[10];
     int t = atoi(argv[1]); // in microseconds
     int n = atoi(argv[2]);
-    int finalIndex[10];
+    
+    struct env* envs = (struct env*)malloc(n * sizeof(struct env));
+    int* finalIndex = (int*)malloc((argc - 3) * sizeof(int));
+    file_queue = (char**)malloc((argc - 3) * sizeof(char*));
+    sizes = (int*)malloc((argc - 3) * sizeof(int));
+    arrays = (int**)malloc((argc - 3) * sizeof(int*));
 
-    for (int i = 0; i < MAX_FILES; i++) {
+    for (int i = 0; i < argc - 3; i++) {
         sizes[i] = 0;
         finalIndex[i] = 0;
-        for (int j = 0; j < MAX_NUMBERS_IN_FILE; j++) {
-            arrays[i][j] = 0;
-        }
     }
 
     // "Очередь" из файлов
     for (int i = 3; i < argc; i++) {
+        file_queue[queue_size] = (char*)malloc(strlen(argv[i]) * sizeof(char));
         strcpy(file_queue[queue_size], argv[i]);
+
+        // В сумме считываем файл 2 раза, но избавились от константных ограничений
+        FILE* file = fopen(argv[i], "r");
+        int count = 0;
+        char c;
+
+        for (c = getc(file); c != EOF; c = getc(file)) {
+            if (c == ' ') count++;
+        }
+
+        if (count > 0) {
+            count++;
+        }
+        fclose(file);
+
+        arrays[queue_size] = (int*)malloc(count * sizeof(int));
+        for (int j = 0; j < count; j++) {
+            arrays[queue_size][j] = 0;
+        }
+
         queue_size++;
     }
 
@@ -147,7 +165,6 @@ int main(int argc, char* argv[]) {
         envs[i].maxTime = t / n;
         envs[i].id = i;
         envs[i].yield_counter = 0;
-        envs[i].timeCheckPoint = getTime();
 
 		coro_new(coroutine_func_f, &envs[i]);
 	}
@@ -163,7 +180,7 @@ int main(int argc, char* argv[]) {
     // Слияние массивов в файл out.txt
     while(1) {
         int countFinished = 0;
-        int smallest = 2147483647;
+        int smallest = INT32_MAX;
         int smallestIndex;
         for (int i = 0; i < queue_size; i++) {
             if (finalIndex[i] == sizes[i]) {
@@ -172,7 +189,7 @@ int main(int argc, char* argv[]) {
             }
 
             // printf("%d ", arrays[i][finalIndex[i]]);
-            
+
             if (arrays[i][finalIndex[i]] <= smallest) {
                 smallest = arrays[i][finalIndex[i]];
                 smallestIndex = i;
@@ -185,12 +202,18 @@ int main(int argc, char* argv[]) {
         finalIndex[smallestIndex]++;
     }
 
-    printf("\nСуммарное время работы: %d мкс\n", (getTime() - mainTimeStart));
+    printf("\nСуммарное время работы: %llu мкс\n", (unsigned long long)(getTime() - mainTimeStart));
     for (int i = 0; i < n; i++) {
-        printf("Корутина [%d]: Время работы %d мкс, Количество yield %d\n", i, envs[i].workTime, envs[i].yield_counter);
+        printf("Корутина [%d]: Время работы %llu мкс, Количество yield %d\n", i, (unsigned long long)envs[i].workTime, envs[i].yield_counter);
     }
     
 
     fclose(ans);
+
+    free(file_queue);
+    free(sizes);
+    free(finalIndex);
+    free(envs);
+    free(arrays);
 	return 0;
 }

@@ -5,7 +5,7 @@ for i in {1..10}
 do 
 	filename=$i".txt";
 	rm -f filename;
-	python3 generator.py -f $filename -c 10000 -m 10000;
+	python3 generator.py -f $filename -c 1000000 -m 1000000;
 done;
 
 gcc main.c libcoro.c;
