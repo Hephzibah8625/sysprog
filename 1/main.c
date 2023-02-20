@@ -121,40 +121,32 @@ int main(int argc, char* argv[]) {
     int n = atoi(argv[2]);
     
     struct env* envs = (struct env*)malloc(n * sizeof(struct env));
-    int* finalIndex = (int*)malloc((argc - 3) * sizeof(int));
+    int* finalIndex = (int*)calloc((argc - 3), sizeof(int));
     file_queue = (char**)malloc((argc - 3) * sizeof(char*));
-    sizes = (int*)malloc((argc - 3) * sizeof(int));
+    sizes = (int*)calloc((argc - 3), sizeof(int));
     arrays = (int**)malloc((argc - 3) * sizeof(int*));
-
-    for (int i = 0; i < argc - 3; i++) {
-        sizes[i] = 0;
-        finalIndex[i] = 0;
-    }
 
     // "Очередь" из файлов
     for (int i = 3; i < argc; i++) {
-        file_queue[queue_size] = (char*)malloc(strlen(argv[i]) * sizeof(char));
-        strcpy(file_queue[queue_size], argv[i]);
+        file_queue[queue_size] = strdup(argv[i]);
 
         // В сумме считываем файл 2 раза, но избавились от константных ограничений
         FILE* file = fopen(argv[i], "r");
         int count = 0;
+        int wasIteration = 0;
         char c;
 
         for (c = getc(file); c != EOF; c = getc(file)) {
             if (c == ' ') count++;
+            wasIteration = 1;
         }
 
-        if (count > 0) {
+        if (wasIteration > 0) {
             count++;
         }
         fclose(file);
 
-        arrays[queue_size] = (int*)malloc(count * sizeof(int));
-        for (int j = 0; j < count; j++) {
-            arrays[queue_size][j] = 0;
-        }
-
+        arrays[queue_size] = (int*)calloc(count, sizeof(int));
         queue_size++;
     }
 
