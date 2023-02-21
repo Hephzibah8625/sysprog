@@ -128,7 +128,7 @@ int main(int argc, char* argv[]) {
 
     // "Очередь" из файлов
     for (int i = 3; i < argc; i++) {
-        file_queue[queue_size] = strdup(argv[i]);
+        file_queue[queue_size] = argv[i];
 
         // В сумме считываем файл 2 раза, но избавились от константных ограничений
         FILE* file = fopen(argv[i], "r");
