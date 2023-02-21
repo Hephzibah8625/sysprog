@@ -202,6 +202,10 @@ int main(int argc, char* argv[]) {
 
     fclose(ans);
 
+    for (int i = 0; i < argc - 3; i++) {
+        free(arrays[i]);
+    }
+
     free(file_queue);
     free(sizes);
     free(finalIndex);
