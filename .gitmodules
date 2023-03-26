@@ -1,0 +1,3 @@
+[submodule "sysprog_sub"]
+	path = sysprog_sub
+	url = https://github.com/Gerold103/sysprog.git
