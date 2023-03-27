@@ -1,9 +1,0 @@
-open:
-+- create file struct
-+- create descriptor
-
-
-close:
-* free blocks
-* free file itself
-* free descriptor
