@@ -435,6 +435,17 @@ int ufs_resize(int fd, size_t new_size)
 			}
 			size = size - BLOCK_SIZE;
 		}
+		while (f_file->last_block->occupied > new_size % BLOCK_SIZE) {
+			f_file->last_block->memory[f_file->last_block->occupied - 1] = 0;
+			f_file->last_block->occupied--;
+		}
+
+		for (int i = 0; i < file_descriptor_capacity; i++) {
+			if (file_descriptors[i] == NULL) continue;
+			if (strcmp(file_descriptors[i]->file->name, f_file->name) == 0) {
+				if (file_descriptors[i]->offset > new_size) file_descriptors[i]->offset = new_size;
+			}
+		}
 	} else if (size < new_size) {
 		while (size < new_size) {
 			struct block* bl = (struct block*)malloc(sizeof(struct block));
