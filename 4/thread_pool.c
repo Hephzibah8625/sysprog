@@ -266,17 +266,23 @@ thread_task_timed_join(struct thread_task *task, double timeout, void **result)
 	int               rc;
   	struct timespec   ts;
   	struct timeval    tp;
-	rc =  gettimeofday(&tp, NULL);
+	rc = gettimeofday(&tp, NULL);
 
     /* Convert from timeval to timespec */
-    ts.tv_sec  = tp.tv_sec + (int)timeout;
-    ts.tv_nsec = tp.tv_usec * 1000 + ((timeout - (int)timeout) * 1e9);
-	while (1) {
+    ts.tv_sec = (long long int)tp.tv_sec + (long long int)timeout;
+    ts.tv_nsec = (long long int)tp.tv_usec * 1000 + (long long int)((timeout - (long long int)timeout) * 1e9);
+
+	if (ts.tv_nsec > 999999999) {
+		ts.tv_sec += ts.tv_nsec / 1000000000;
+		ts.tv_nsec = ts.tv_nsec % 1000000000;
+	}
+	
+	while (task->is_active) {
 		wait_res = pthread_cond_timedwait(&(task->cond), &(task->mutex), &ts);
 		if (wait_res == 110 || !task->is_active) break;
 	}
 
-	if (wait_res == 110) {
+	if (task->is_active) {
 		tmut(task);
 		return TPOOL_ERR_TIMEOUT;
 	}
