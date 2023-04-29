@@ -3,6 +3,7 @@
 #include "sys/time.h"
 #include "stdlib.h"
 #include <stdatomic.h>
+#include <errno.h>
 
 #define SUCCESS 0;
 
@@ -307,7 +308,7 @@ int thread_task_timed_join(struct thread_task *task, double timeout, void **resu
 	while (task->is_active)
 	{
 		wait_res = pthread_cond_timedwait(&(task->cond), &(task->mutex), &ts);
-		if (wait_res == 110 || !task->is_active)
+		if (wait_res == ETIMEDOUT || !task->is_active)
 			break;
 	}
 
